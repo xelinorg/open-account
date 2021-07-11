@@ -8,7 +8,11 @@ const certfilename = 'cert.pem'
 
 module.exports = {
   createServer: (option) =>
-    https.createServer(option.config, option.handler).listen(option.port),
+    oaProvider.attach().then(f =>
+      https.createServer(
+        option.config, (req, res) => f(req, res, () => {})
+      ).listen(option.port)
+    ),
   createOption: (option) => ({
     ...option,
     ...(option.cryptopath
@@ -19,11 +23,6 @@ module.exports = {
           }
         }
       : { config: {} }),
-    ...(typeof option.handler !== 'function'
-      ? {
-          handler: (req, res) => oaProvider.attach()(req, res, () => {})
-        }
-      : {}),
     ...(typeof option.port !== 'number'
       ? { port: 36936 }
       : {})
