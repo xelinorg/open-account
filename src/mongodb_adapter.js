@@ -130,7 +130,8 @@ class MongoAdapter {
   // you pass the adapter to `new Provider`
   static async connect () {
     const connection = await MongoClient.connect(process.env.MONGODB_URI, {
-      useNewUrlParser: true
+      useNewUrlParser: true,
+      useUnifiedTopology: true
     })
     DB = connection.db(connection.s.options.dbName)
   }

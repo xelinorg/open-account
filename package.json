@@ -10,16 +10,19 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "body-parser": "^1.19.0",
+    "jose2": "npm:jose@^2.0.4",
+    "lowdb": "^1.0.0",
     "mongodb": "^3.6.9",
-    "oidc-provider": "^7.4.1",
-    "jose2": "npm:jose@^2.0.4"
+    "mongoose": "^5.13.0",
+    "nanoid": "^3.1.23",
+    "oidc-provider": "^7.4.1"
   },
   "devDependencies": {
     "eslint": "^7.29.0",
     "eslint-config-standard": "^16.0.3",
     "eslint-plugin-import": "^2.23.4",
     "eslint-plugin-node": "^11.1.0",
-    "eslint-plugin-promise": "^5.1.0",
-    "jose": "^3.13.0"
+    "eslint-plugin-promise": "^5.1.0"
   }
 }
