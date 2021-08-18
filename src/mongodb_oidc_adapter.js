@@ -1,6 +1,3 @@
-/* eslint-disable max-classes-per-file */
-
-// npm i mongodb@^3.0.0
 const { MongoClient } = require('mongodb')
 
 let DB

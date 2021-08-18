@@ -1,5 +1,19 @@
 const assert = require('assert')
 
+const ejs = require('ejs')
+
+const ejsLogin = 'views/login.ejs'
+const ejsInteract = 'views/interaction.ejs'
+
+function htmlResponse (view, data, res, cb) {
+  const filename = view === 'login' ? ejsLogin : ejsInteract
+  return ejs.renderFile(filename, data, (e, s) => {
+    if (e) return cb(e)
+    res.body = s
+    return cb(null)
+  })
+}
+
 function setNoCache (req, res, next) {
   res.setHeader('Pragma', 'no-cache')
   res.setHeader('Cache-Control', 'no-cache, no-store')
@@ -30,28 +44,63 @@ const root = async (oidc, req, res, next) => {
     const client = await oidc.Client.find(params.client_id)
 
     if (prompt.name === 'login') {
-      return next(null, {
+      return htmlResponse('login', {
         client,
         uid,
         details: prompt.details,
         params,
         title: 'Sign-in',
         flash: undefined
-      })
+      }, res, next)
     }
-    return next(null, {
+    return htmlResponse('interaction', {
       client,
       uid,
       details: prompt.details,
       params,
-      title: 'Authorize'
-    })
+      title: prompt.name
+    }, res, next)
   } catch (err) {
     return next(err)
   }
 }
 
-const login = Account => async (oidc, req, res, next) => {
+const create = Account => async (oidc, req, res, next) => {
+  // '/interaction/:uid/create'
+  // const interactionDetails = await oidc.interactionDetails(req, res)
+
+  try {
+    const account = await Account.create(
+      req.body.email, req.body.password
+    )
+    if (!account) return next('could not create account')
+    // TODO add client_id into grant
+    const agrant = new oidc.Grant(oidc)
+    agrant.addOIDCScope('openid')
+    const asession = new oidc.Session(oidc)
+
+    return agrant.save().then(async xgrant => {
+      asession.grantIdFor(account.id, xgrant)
+      asession.loginAccount({ accountId: account.id })
+      return asession.save(600).then(async xsession => {
+        // const result = { consent: { grantId: xgrant } }
+        const result = {
+          login: { accountId: account.id },
+          create: { accountId: account.id }
+        }
+        await oidc.interactionFinished(
+          req, res, result, { mergeWithLastSubmission: true }
+        )
+
+        return next(null, normalizeResult(result))
+      })
+    })
+  } catch (err) {
+    next(err)
+  }
+}
+
+const verify = Account => async (oidc, req, res, next) => {
   // '/interaction/:uid/login'
   try {
     const { uid, prompt, params } = await oidc.interactionDetails(req, res)
@@ -84,6 +133,44 @@ const login = Account => async (oidc, req, res, next) => {
       req, res, result, { mergeWithLastSubmission: false }
     )
     return next(null, normalizeResult(result))
+  } catch (err) {
+    next(err)
+  }
+}
+
+const login = Account => async (oidc, req, res, next) => {
+  // '/interaction/:uid/login'
+  try {
+    const { uid, prompt, params } = await oidc.interactionDetails(req, res)
+    assert.strictEqual(prompt.name, 'login')
+    const client = await oidc.Client.find(params.client_id)
+
+    const accountId = await Account.authenticate(
+      req.body.email, req.body.password
+    )
+
+    if (!accountId) {
+      return htmlResponse('login', {
+        client,
+        uid,
+        details: prompt.details,
+        params: {
+          ...params,
+          login_hint: req.body.email
+        },
+        title: 'Sign-in',
+        flash: 'Invalid email or password.'
+      }, res, next)
+    }
+
+    const result = {
+      login: { accountId }
+    }
+
+    await oidc.interactionFinished(
+      req, res, result, { mergeWithLastSubmission: false }
+    )
+    return next(null)
   } catch (err) {
     next(err)
   }
@@ -144,7 +231,7 @@ const confirm = async (oidc, req, res, next) => {
     await oidc.interactionFinished(
       req, res, result, { mergeWithLastSubmission: true }
     )
-    return next(null, normalizeResult(result))
+    return next(null)
   } catch (err) {
     next(err)
   }
@@ -160,7 +247,7 @@ const abort = async (oidc, req, res, next) => {
     await oidc.interactionFinished(
       req, res, result, { mergeWithLastSubmission: false }
     )
-    return next(null, normalizeResult(result))
+    return next(null)
   } catch (err) {
     next(err)
   }
@@ -168,58 +255,68 @@ const abort = async (oidc, req, res, next) => {
 
 const actions = {
   login,
+  create,
+  verify,
   abort,
   confirm,
   root
 }
 
 const errorHandler = (err, res) => {
-  res.writeHead(err.statusCode)
-  res.setHeader('Content-Type', 'application/json')
-  return res.end(JSON.stringify({
-    ...(err.error ? { error: err.error } : {}),
-    ...(err.error_description ? { error_desc: err.error_description } : {}),
-    ...(err.error_detail ? { error_detail: err.error_detail } : {}),
-    ...(err.name ? { name: err.name } : {})
-  }))
-}
-
-const successHandler = (res, body) => {
   if (!res.finished) {
-    res.setHeader('Content-Type', 'application/json')
-    res.write(JSON.stringify(body))
-    return res.end()
+    res.writeHead(err.statusCode || 500)
+    res.addTrailers({ 'Content-Type': 'application/json' })
+    return res.end(JSON.stringify({
+      ...(err.error ? { error: err.error } : {}),
+      ...(err.error_description ? { error_desc: err.error_description } : {}),
+      ...(err.error_detail ? { error_detail: err.error_detail } : {}),
+      ...(err.name ? { name: err.name } : {})
+    }))
   }
 }
 
+const successHandler = (res) => {
+  if (!res.finished && res.body) {
+    if (typeof res.body === 'string') {
+      res.addTrailers({ 'Content-Type': 'text/html' })
+      res.write(res.body)
+    } else {
+      res.addTrailers({ 'Content-Type': 'application/json' })
+      res.write(JSON.stringify(res.body))
+    }
+  }
+  return res.end()
+}
+
 module.exports.handler = (oidc, bodyParser, Account) => (req, res) => {
-  // add setNoCache
-  const middleware = [
+  const torun = [
     setNoCache,
     bodyParser.urlencoded({ extended: false }),
     bodyParser.json()
   ]
+
   const next = (nerr, nres) => {
     if (nerr) return errorHandler(nerr, res)
     return nres
   }
-  return middleware.reduce((acc, cur) => {
-    cur(acc[0][0], acc[0][1], acc[0][2])
-    return acc
-  }, [[req, res, next]]).map(i => {
-    const urlParts = req.url.split('/').filter(p => p)
-    const interactionIdx = urlParts.indexOf('interaction')
-    const interaction = interactionIdx === 0 && urlParts[interactionIdx + 2]
-      ? urlParts[interactionIdx + 2]
-      : 'root'
-    const action = actions[interaction]
-    if (action && action.name === 'login') {
-      const laction = action(Account)
-      return laction(oidc, i[0], i[1], next)
-        .then(lares => successHandler(res, lares))
-    }
 
-    return action(oidc, i[0], i[1], next)
-      .then(ares => successHandler(res, ares))
-  })
+  for (let n = 0; n < torun.length; n++) {
+    torun[n](req, res, function (e, r) {
+      if (e) errorHandler(e, res)
+      if (n >= torun.length - 1) {
+        const urlParts = req.url.split('/').filter(p => p)
+        const interactionIdx = urlParts.indexOf('interaction')
+        const interaction = interactionIdx === 0 && urlParts[interactionIdx + 2]
+          ? urlParts[interactionIdx + 2]
+          : 'root'
+        let action = actions[interaction]
+        if (action && (action.name === 'login' || action.name === 'create')) {
+          action = action(Account)
+        }
+
+        return action(oidc, req, res, next)
+          .then(() => successHandler(res))
+      }
+    })
+  }
 }
