@@ -6,6 +6,8 @@ KEY_FILENAME=key.pem
 CERT_FILENAME=cert.pem
 CRYPTO_DEST=$BUILD_DIR/$CONTAINER_DIR/$CRYPTO_DIR/
 
+IMAGE_TAG=$1
+
 mkdir $BUILD_DIR
 
 cp -r $CONTAINER_DIR $BUILD_DIR
@@ -21,4 +23,4 @@ cp -r $SRC_DIR $BUILD_DIR/$CONTAINER_DIR
 
 cd $BUILD_DIR/$CONTAINER_DIR
 
-docker build -t arsteps-auth .
+docker build -t $IMAGE_TAG .

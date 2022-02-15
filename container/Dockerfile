@@ -1,5 +1,5 @@
-FROM node:12
-RUN groupadd -r artsteps && useradd -r -g artsteps artsteps
+FROM node:16
+RUN groupadd -r oap && useradd -r -g oap oap
 
 RUN mkdir -p /container/open-account
 
@@ -11,9 +11,9 @@ COPY src /container/open-account/src
 COPY package.json /container/open-account
 COPY index.js /container/open-account
 
-RUN chown -R artsteps:artsteps /container/open-account
+RUN chown -R oap:oap /container/open-account
 
-USER artsteps
+USER oap
 WORKDIR /container/open-account
 
 ENV HOME=/container/open-account
