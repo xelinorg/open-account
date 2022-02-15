@@ -2,7 +2,7 @@ const assert = require('assert')
 
 const { MongoClient } = require('mongodb')
 
-const util = require('./util')
+const localutil = require('./util')
 
 let DB
 let coll
@@ -24,25 +24,54 @@ module.exports = {
     ctx, id
   ) {
     const account = await coll.findOne({ id: id })
-    const openidScope = 'openid'
+    const openidScopeIn = ['profile', 'phone', 'email', 'address']
     if (!account) {
       return undefined
     }
-    const atoken = ctx.oidc.accessToken
-    const scope = atoken && atoken.scope && atoken.scope.length > 0
-      ? atoken.scope.split(' ')
-      : []
+    let scope = []
+    if (
+      ['authorization', 'userinfo'].includes(ctx.oidc.route) &&
+      ctx.oidc.accessToken &&
+      ctx.oidc.accessToken.scope &&
+      ctx.oidc.accessToken.scope.length > 0
+    ) {
+      scope = ctx.oidc.accessToken.scope.split(' ')
+    }
+    if (
+      ctx.oidc.route === 'resume' &&
+      ctx.oidc.entities &&
+      ctx.oidc.entities.Interaction &&
+      ctx.oidc.entities.Interaction.params &&
+      ctx.oidc.entities.Interaction.params.scope
+    ) {
+      scope = ctx.oidc.entities.Interaction.params.scope.split(' ')
+    }
+
+    if (
+      ctx.oidc.route === 'token' &&
+      ctx.oidc.entities &&
+      ctx.oidc.entities.Grant &&
+      ctx.oidc.entities.Grant.openid &&
+      ctx.oidc.entities.Grant.openid.scope
+    ) {
+      scope = ctx.oidc.entities.Grant.openid.scope.split(' ')
+    }
 
     return {
       accountId: id,
       async claims () {
         const more = scope.reduce((acc, cur) => {
           if (
-            cur !== openidScope &&
+            openidScopeIn.indexOf(cur) >= 0 &&
             Object.keys(account).includes(cur) &&
             Object.keys(localClaims).includes(cur)
           ) {
-            acc[cur] = account[cur]
+            const c = account[cur]
+            if (typeof c === 'object' && Object.keys(c).length > 0) {
+              Object.keys(c).forEach(k => (acc[k] = account[cur][k]))
+            } else {
+              acc[cur] = account[cur]
+            }
           }
           return acc
         }, {}) || {}
@@ -64,7 +93,7 @@ module.exports = {
       const lowercased = String(email).toLowerCase()
       // const account = db.get('users').find({ email: lowercased }).value()
       const account = await coll.findOne({ email: lowercased })
-      return util.matchpass(password, account.password)
+      return localutil.matchpass(password, account.password)
         .then(spass => {
           assert(
             spass,
@@ -82,15 +111,15 @@ module.exports = {
     email, password, ...rest
   ) {
     try {
-      assert(password, 'passwinsertOneord must be provided')
+      assert(password, 'password must be provided')
       assert(email, 'email must be provided')
       const lowercased = String(email).toLowerCase()
 
-      const exiting = await coll.findOne({ email: lowercased })
-      assert(!exiting, 'already exists')
+      const existing = await coll.findOne({ email: lowercased })
+      assert(!existing, 'could not create account')
 
-      const accountId = util.idFactory()
-      return util.saltpass(password).then(spass => {
+      const accountId = localutil.idFactory()
+      return localutil.saltpass(password).then(spass => {
         const user = {
           _id: accountId,
           id: accountId,

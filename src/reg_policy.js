@@ -5,7 +5,6 @@ const condition = require('./condition')
 
 module.exports = {
   'my-policy': function (ctx, properties) {
-    console.log('my-policy', ctx, properties)
     // @param ctx - koa request context
     // @param properties - client props which are about to be validated
     // example of setting a default
@@ -22,7 +21,6 @@ module.exports = {
     }
   },
   'my-policy-2': async function (ctx, properties) {
-    console.log('my-policy-2', ctx, properties)
-    properties.client_secret = util.generateRandomString(8)
+    properties.client_secret = util.secretFactory()
   }
 }

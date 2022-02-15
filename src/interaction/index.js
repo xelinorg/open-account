@@ -1,13 +1,22 @@
 const assert = require('assert')
+const path = require('path')
 
 const ejs = require('ejs')
 
-const ejsLogin = 'views/login.ejs'
-const ejsInteract = 'views/interaction.ejs'
+const interactionView = {
+  login: 'views/login.ejs',
+  create: 'views/create.ejs',
+  interaction: 'views/interaction.ejs'
+}
 
 function htmlResponse (view, data, res, cb) {
-  const filename = view === 'login' ? ejsLogin : ejsInteract
-  return ejs.renderFile(filename, data, (e, s) => {
+  const filename = Object.keys(interactionView).includes(view)
+    ? interactionView[view]
+    : interactionView.login
+
+  const fqfn = path.resolve(__dirname, './'.concat(filename))
+
+  return ejs.renderFile(fqfn, data, (e, s) => {
     if (e) return cb(e)
     res.body = s
     return cb(null)
@@ -53,6 +62,16 @@ const root = async (oidc, req, res, next) => {
         flash: undefined
       }, res, next)
     }
+    if (prompt.name === 'create') {
+      return htmlResponse('create', {
+        client,
+        uid,
+        details: prompt.details,
+        params,
+        title: 'Sign-up',
+        flash: undefined
+      }, res, next)
+    }
     return htmlResponse('interaction', {
       client,
       uid,
@@ -95,44 +114,6 @@ const create = Account => async (oidc, req, res, next) => {
         return next(null, normalizeResult(result))
       })
     })
-  } catch (err) {
-    next(err)
-  }
-}
-
-const verify = Account => async (oidc, req, res, next) => {
-  // '/interaction/:uid/login'
-  try {
-    const { uid, prompt, params } = await oidc.interactionDetails(req, res)
-    assert.strictEqual(prompt.name, 'login')
-    const client = await oidc.Client.find(params.client_id)
-
-    const accountId = await Account.authenticate(
-      req.body.email, req.body.password
-    )
-
-    if (!accountId) {
-      return res.write('login ' + JSON.stringify({
-        client,
-        uid,
-        details: prompt.details,
-        params: {
-          ...params,
-          login_hint: req.body.email
-        },
-        title: 'Sign-in',
-        flash: 'Invalid email or password.'
-      }))
-    }
-
-    const result = {
-      login: { accountId }
-    }
-
-    await oidc.interactionFinished(
-      req, res, result, { mergeWithLastSubmission: false }
-    )
-    return next(null, normalizeResult(result))
   } catch (err) {
     next(err)
   }
@@ -256,7 +237,6 @@ const abort = async (oidc, req, res, next) => {
 const actions = {
   login,
   create,
-  verify,
   abort,
   confirm,
   root

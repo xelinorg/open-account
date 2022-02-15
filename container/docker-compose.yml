@@ -1,0 +1,38 @@
+version: '3.1'
+
+services:
+  mongodb-srv:
+    image: mongo:latest
+    container_name: oap-db
+    networks: ['default']
+    volumes:
+      - ./mongod.conf:/etc/mongod.conf
+    ports:
+        - 27017:27017
+    entrypoint: ["mongod", "--config", "/etc/mongod.conf"]
+  auth-srv:
+    image: arsteps-auth
+    container_name: oap-service
+    networks: ['default']
+    depends_on:
+      - 'mongodb-srv'
+    environment:
+      - MONGODB_URI=mongodb://mongodb-srv/open-account
+      - SECURE_KEY="abcde, asadad, kjhhkhj, hjbshjbsa, papakia, ktl, zwakia"
+      - RESOURCE_INDICATOR_MODE=path
+      - RESOURCE_INDICATOR_FRAG=/api/v1
+      - CRYPTOPATH=/container/open-account/crypto
+      - PROJECT_ROOT_PATH=/container/open-account/
+  apache:
+    image: httpd:2.4
+    container_name: oap-proxy
+    ports: ['80:80', '443:443']
+    networks: ['default']
+    extra_hosts:
+      docker-root-host: 172.19.0.1
+    depends_on:
+      - 'auth-srv'
+    volumes:
+      - ./httpd.conf:/usr/local/apache2/conf/httpd.conf
+      - ./crypto/cert.pem:/usr/local/apache2/conf/server.crt
+      - ./crypto/key.pem:/usr/local/apache2/conf/server.key

@@ -2,15 +2,21 @@ const https = require('https')
 const fs = require('fs')
 
 const oaProvider = require('./provider')
+const interaction = require('./interaction')
+const oapConfig = require('./config')
 
 const keyfilename = 'key.pem'
 const certfilename = 'cert.pem'
 
 module.exports = {
   createServer: (option) =>
-    oaProvider.attach().then(f =>
+    oaProvider.attach(
+      oapConfig.create({ option, interaction })
+    ).then(f =>
       https.createServer(
-        option.config, (req, res) => f(req, res, () => {})
+        option.config, (req, res) => f(req, res, () => {
+          console.info('root listener', req.method, req.path)
+        })
       ).listen(option.port)
     ),
   createOption: (option) => ({
