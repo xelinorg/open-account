@@ -4,7 +4,7 @@ const bcrypt = require('bcryptjs')
 const nanoid = require('nanoid')
 
 function base64url (str) {
-  return str.replace(/\+/g, '-').replace(/\//g, '_').replace(/\=+$/, '')
+  return str.replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
 }
 
 function generateRandomString (length) {
@@ -37,8 +37,8 @@ function idFactory (ctx) {
 }
 
 function secretFactory (ctx) {
-  return base64url.encodeBuffer(
-    crypto.randomBytes(64)
+  return base64url(
+    crypto.randomBytes(64).toString('base64')
   ) // 512 base64url random bits
 }
 
@@ -86,7 +86,7 @@ function handleCORS (req, res, next) {
   if (req.method.toUpperCase() === 'OPTIONS') {
     res.end()
   }
-  return next(null)
+  return next()
 }
 
 const b64favicon = 'AAABAAIAEBAAAAEAIABoBAAAJgAAABAQAgABAAEAsAAAAI4EAAAoAAAAE' +
