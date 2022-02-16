@@ -17,3 +17,4 @@ publish-docker-job:      # This job runs in the publish stage.
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
     - /bin/sh script/build_docker.sh $IMAGE_TAG
     - docker push $IMAGE_TAG
+

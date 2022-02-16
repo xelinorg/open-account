@@ -1,0 +1,4 @@
+
+ci_access:
+  projects:
+  - id: xelinorg/open-account
