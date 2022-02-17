@@ -1,42 +1,5 @@
 #!/usr/bin/env bash
 
-SOURCE="${BASH_SOURCE[0]}"
-while [ -h "$SOURCE" ]; do # resolve $SOURCE until the file is no longer a symlink
-  DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
-  SOURCE="$(readlink "$SOURCE")"
-  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE" # if $SOURCE was a relative symlink, we need to resolve it relative to the path where the symlink file was located
-done
-
-export DEPLOY_ROOT_DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
-
-source "$DEPLOY_ROOT_DIR/common.sh"
-
-ensure_environment_url
-ensure_deploy_variables
-create_kubeconfig
-
-CI_ENVIRONMENT_HOSTNAME="${CI_ENVIRONMENT_URL}"
-CI_ENVIRONMENT_HOSTNAME="${CI_ENVIRONMENT_HOSTNAME/http:\/\//}"
-CI_ENVIRONMENT_HOSTNAME="${CI_ENVIRONMENT_HOSTNAME/https:\/\//}"
-
-# set this on gitlab pipeline env vars
-#MONGODB_URI="mongodb://admin:my-super-secret-password@rtstps.xyz/${CI_ENVIRONMENT_SLUG}?authSource=admin"
-
-cat <<EOF | kubectl apply -f -
-kind: Namespace
-apiVersion: v1
-metadata:
-  name: $KUBE_NAMESPACE
-EOF
-
-kubectl create secret -n $KUBE_NAMESPACE \
-  docker-registry gitlab-registry \
-  --docker-server="$CI_REGISTRY" \
-  --docker-username="$REGISTRY_USER" \
-  --docker-password="$REGISTRY_PASSWORD" \
-  --docker-email="$GITLAB_USER_EMAIL" \
-  -o yaml --dry-run=client | kubectl replace -n $KUBE_NAMESPACE --force -f -
-
 track="${1-stable}"
 name="$CI_ENVIRONMENT_SLUG"
 
@@ -64,8 +27,8 @@ else
   fi
 fi
 
-echo "Deploying $CI_ENVIRONMENT_SLUG (track: $track, replicas: $replicas) with $CI_REGISTRY/$CI_REGISTRY_IMAGE:$CI_REGISTRY_TAG..."
-cat <<EOF | kubectl apply -n $KUBE_NAMESPACE --force -f -
+echo "Deploying $CI_ENVIRONMENT_SLUG (track: $track, replicas: $replicas) with $CI_REGISTRY_IMAGE:$CI_REGISTRY_TAG..."
+cat <<EOF > deploy_oap.yml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -86,7 +49,7 @@ spec:
   replicas: $replicas
   selector:
     matchLabels:
-      app.kubernetes.io/name: $name
+      app.kubernetes.io/name: $CI_ENVIRONMENT_SLUG
   strategy:
      type: RollingUpdate
      rollingUpdate:
@@ -98,16 +61,14 @@ spec:
         app.gitlab.com/env: $CI_ENVIRONMENT_SLUG
         app.gitlab.com/app: $CI_PROJECT_PATH_SLUG
       labels:
-        app.kubernetes.io/name: $name
+        app.kubernetes.io/name: $CI_ENVIRONMENT_SLUG
         app: $CI_ENVIRONMENT_SLUG
         track: "$track"
         tier: web
     spec:
-      imagePullSecrets:
-      - name: gitlab-registry
       containers:
       - name: app
-        image: $CI_REGISTRY/$CI_REGISTRY_IMAGE:$CI_REGISTRY_TAG
+        image: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
         imagePullPolicy: Always
         env:
         - name: CI_PIPELINE_ID
@@ -157,7 +118,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: $CI_ENVIRONMENT_SLUG
+  name: $name
   namespace: $KUBE_NAMESPACE
   annotations:
     app.gitlab.com/env: $CI_ENVIRONMENT_SLUG
@@ -178,7 +139,7 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: $CI_ENVIRONMENT_SLUG
+  name: $name
   namespace: $KUBE_NAMESPACE
   labels:
     app: $CI_ENVIRONMENT_SLUG
@@ -193,10 +154,10 @@ metadata:
 spec:
   tls:
   - hosts:
-    - $CI_ENVIRONMENT_SLUG.$CI_ENVIRONMENT_HOSTNAME
+    - ${CI_ENVIRONMENT_SLUG}.${FQDN}
     secretName: ${CI_ENVIRONMENT_SLUG}-tls
   rules:
-  - host: $CI_ENVIRONMENT_SLUG.$CI_ENVIRONMENT_HOSTNAME
+  - host: ${CI_ENVIRONMENT_SLUG}.${FQDN}
     http:
       paths:
       - path: /
@@ -208,13 +169,16 @@ spec:
               number: 36936
 EOF
 
+cat deploy_oap.yml
+kubectl apply -n $KUBE_NAMESPACE --force -f deploy_oap.yml
+
 echo "Waiting for deployment..."
-kubectl rollout status -n "$KUBE_NAMESPACE" -w "deployment/$name"
+kubectl rollout status -n "$KUBE_NAMESPACE" -w "deployment/$CI_ENVIRONMENT_SLUG"
 
 if [[ "$track" == "stable" ]]; then
   echo "Removing canary deployments (if found)..."
   kubectl delete all,ing -l "app=$CI_ENVIRONMENT_SLUG" -l "track=canary" -n "$KUBE_NAMESPACE"
 fi
 
-echo "Application is accessible at: ${CI_ENVIRONMENT_URL}"
+echo "Application is accessible at: ${CI_ENVIRONMENT_SLUG}.${FQDN}"
 echo ""
