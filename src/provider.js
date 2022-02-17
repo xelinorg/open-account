@@ -50,6 +50,7 @@ const providerFactory = (option) => {
 
 module.exports.attach = (option) => {
   const o = option || {}
+  !o.url && (o.url = option.get().url)
   !o.url && (o.url = 'https://oap.localnet/')
   return providerFactory(o)
 }

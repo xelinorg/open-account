@@ -5,6 +5,9 @@ stages:          # List of stages for jobs, and their order of execution
 publish-docker-job:      # This job runs in the publish stage.
   image: docker:stable
   stage: publish  # It only runs when *both* jobs in the test stage complete successfully.
+  tags:
+    - registry
+    - publish
   services:
     - docker:dind
   variables:
@@ -12,9 +15,37 @@ publish-docker-job:      # This job runs in the publish stage.
     IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   script:
     - echo $CI_REGISTRY $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
-    - echo $CERT_PEM > crypto/cert.pem
-    - echo $KEY_PEM > crypto/key.pem
+    - echo "$CERT_PEM" > crypto/cert.pem
+    - echo "$KEY_PEM" > crypto/key.pem
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
     - /bin/sh script/build_docker.sh $IMAGE_TAG
     - docker push $IMAGE_TAG
 
+deploy-job:      # This job runs in the deploy stage.
+  image: node:16-bullseye
+  stage: deploy  # It only runs when *both* jobs in the test stage complete successfully.
+  tags:
+    - k8s
+    - deploy
+  variables:
+    KUBE_NAMESPACE: gitlab-kubernetes-agent
+  before_script:
+    - apt-get update
+    - apt-get install -y apt-transport-https ca-certificates curl
+    - curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
+    - echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | tee /etc/apt/sources.list.d/kubernetes.list
+    - apt-get update
+    - apt-get install -qy kubelet=1.22.2-00 kubectl=1.22.2-00 kubeadm=1.22.2-00 --allow-downgrades --allow-change-held-packages
+  script:
+    - echo "Deploying application on review dev environment..."
+    - echo $KUBECONFIG
+    - cat $KUBECONFIG
+    - kubectl config use-context xelinorg/open-account:main
+    - /bin/bash script/deploy_k8s.sh
+  environment:
+    name: review/$CI_COMMIT_REF_SLUG
+    url: https://${CI_ENVIRONMENT_SLUG}.${FQDN}/.well-known/openid-configuration
+    #kubernetes:
+      #namespace: review/$CI_COMMIT_REF_SLUG
+  rules:
+    - if: $CI_MERGE_REQUEST_ID

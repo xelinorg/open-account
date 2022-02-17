@@ -11,7 +11,7 @@ const certfilename = 'cert.pem'
 module.exports = {
   createServer: (option) =>
     oaProvider.attach(
-      oapConfig.create({ option, interaction })
+      oapConfig.create({ ...option, interaction })
     ).then(f =>
       https.createServer(
         option.config, (req, res) => f(req, res, () => {
