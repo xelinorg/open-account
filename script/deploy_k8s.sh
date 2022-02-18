@@ -28,7 +28,7 @@ else
 fi
 
 echo "Deploying $CI_ENVIRONMENT_SLUG (track: $track, replicas: $replicas) with $CI_REGISTRY_IMAGE:$CI_REGISTRY_TAG..."
-cat <<EOF > deploy_oap.yml
+cat <<EOF > oap_deployment.yml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -47,6 +47,7 @@ spec:
   paused: false
   progressDeadlineSeconds: 300
   replicas: $replicas
+  revisionHistoryLimit: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: $CI_ENVIRONMENT_SLUG
@@ -114,7 +115,9 @@ spec:
             port: web
           initialDelaySeconds: 120
           timeoutSeconds: 120
----
+EOF
+
+cat <<EOF > oap_service.yml
 apiVersion: v1
 kind: Service
 metadata:
@@ -168,9 +171,11 @@ spec:
             port:
               number: 36936
 EOF
+cat oap_service.yml
+kubectl apply -n $KUBE_NAMESPACE --force -f oap_service.yml
 
-cat deploy_oap.yml
-kubectl apply -n $KUBE_NAMESPACE --force -f deploy_oap.yml
+cat oap_deployment.yml
+kubectl apply -n $KUBE_NAMESPACE --force -f oap_deployment.yml
 
 echo "Waiting for deployment..."
 kubectl rollout status -n "$KUBE_NAMESPACE" -w "deployment/$CI_ENVIRONMENT_SLUG"
