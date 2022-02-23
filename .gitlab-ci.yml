@@ -21,14 +21,12 @@ publish-docker-job:      # This job runs in the publish stage.
     - /bin/sh script/build_docker.sh $IMAGE_TAG
     - docker push $IMAGE_TAG
 
-deploy-job:      # This job runs in the deploy stage.
+deploy-job-review:      # This job runs in the deploy stage.
   image: node:16-bullseye
   stage: deploy  # It only runs when *both* jobs in the test stage complete successfully.
   tags:
     - k8s
     - deploy
-  variables:
-    KUBE_NAMESPACE: gitlab-kubernetes-agent
   before_script:
     - apt-get update
     - apt-get install -y apt-transport-https ca-certificates curl
@@ -38,14 +36,33 @@ deploy-job:      # This job runs in the deploy stage.
     - apt-get install -qy kubelet=1.22.2-00 kubectl=1.22.2-00 kubeadm=1.22.2-00 --allow-downgrades --allow-change-held-packages
   script:
     - echo "Deploying application on review dev environment..."
-    - echo $KUBECONFIG
-    - cat $KUBECONFIG
     - kubectl config use-context xelinorg/open-account:main
     - /bin/bash script/deploy_k8s.sh
   environment:
     name: review/$CI_COMMIT_REF_SLUG
     url: https://${CI_ENVIRONMENT_SLUG}.${FQDN}/.well-known/openid-configuration
-    #kubernetes:
-      #namespace: review/$CI_COMMIT_REF_SLUG
   rules:
     - if: $CI_MERGE_REQUEST_ID
+
+deploy_prod:
+  stage: deploy
+  tags:
+  - k8s
+  - deploy
+  before_script:
+    - apt-get update
+    - apt-get install -y apt-transport-https ca-certificates curl
+    - curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg
+    - echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | tee /etc/apt/sources.list.d/kubernetes.list
+    - apt-get update
+    - apt-get install -qy kubelet=1.22.2-00 kubectl=1.22.2-00 kubeadm=1.22.2-00 --allow-downgrades --allow-change-held-packages
+  script:
+    - echo "Deploy to production server"
+    - kubectl config use-context xelinorg/open-account:main
+    - /bin/bash script/deploy_k8s.sh
+  environment:
+    name: production
+    url: https://${FQDN}/.well-known/openid-configuration
+  when: manual
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
