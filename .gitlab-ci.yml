@@ -34,6 +34,8 @@ deploy-job-review:      # This job runs in the deploy stage.
     - echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | tee /etc/apt/sources.list.d/kubernetes.list
     - apt-get update
     - apt-get install -qy kubelet=1.22.2-00 kubectl=1.22.2-00 kubeadm=1.22.2-00 --allow-downgrades --allow-change-held-packages
+  variables:
+    KUBE_NAMESPACE: gitlab-kubernetes-agent
   script:
     - echo "Deploying application on review dev environment..."
     - kubectl config use-context xelinorg/open-account:main
@@ -56,6 +58,8 @@ deploy_prod:
     - echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" | tee /etc/apt/sources.list.d/kubernetes.list
     - apt-get update
     - apt-get install -qy kubelet=1.22.2-00 kubectl=1.22.2-00 kubeadm=1.22.2-00 --allow-downgrades --allow-change-held-packages
+  variables:
+    KUBE_NAMESPACE: gitlab-kubernetes-agent
   script:
     - echo "Deploy to production server"
     - kubectl config use-context xelinorg/open-account:main
