@@ -36,6 +36,7 @@ deploy-job-review:      # This job runs in the deploy stage.
     - apt-get install -qy kubelet=1.22.2-00 kubectl=1.22.2-00 kubeadm=1.22.2-00 --allow-downgrades --allow-change-held-packages
   variables:
     KUBE_NAMESPACE: gitlab-kubernetes-agent
+    ENV_FQDN: ${CI_ENVIRONMENT_SLUG}.${FQDN}
   script:
     - echo "Deploying application on review dev environment..."
     - kubectl config use-context xelinorg/open-account:main
@@ -60,6 +61,7 @@ deploy_prod:
     - apt-get install -qy kubelet=1.22.2-00 kubectl=1.22.2-00 kubeadm=1.22.2-00 --allow-downgrades --allow-change-held-packages
   variables:
     KUBE_NAMESPACE: gitlab-kubernetes-agent
+    ENV_FQDN: ${FQDN}
   script:
     - echo "Deploy to production server"
     - kubectl config use-context xelinorg/open-account:main

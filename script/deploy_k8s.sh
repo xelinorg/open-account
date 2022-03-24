@@ -67,6 +67,8 @@ spec:
         track: "$track"
         tier: web
     spec:
+      nodeSelector:
+        bbone.xyz/app: oap
       containers:
       - name: app
         image: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
@@ -89,7 +91,7 @@ spec:
         - name: PROJECT_ROOT_PATH
           value: /container/open-account/
         - name: OAP_ISSUER_URL
-          value: https://$CI_ENVIRONMENT_SLUG.$FQDN
+          value: https://${ENV_FQDN}
         ports:
         - name: web
           containerPort: 36936
@@ -157,10 +159,10 @@ metadata:
 spec:
   tls:
   - hosts:
-    - ${CI_ENVIRONMENT_SLUG}.${FQDN}
+    - ${ENV_FQDN}
     secretName: ${CI_ENVIRONMENT_SLUG}-tls
   rules:
-  - host: ${CI_ENVIRONMENT_SLUG}.${FQDN}
+  - host: ${ENV_FQDN}
     http:
       paths:
       - path: /
@@ -185,5 +187,5 @@ if [[ "$track" == "stable" ]]; then
   kubectl delete all,ing -l "app=$CI_ENVIRONMENT_SLUG" -l "track=canary" -n "$KUBE_NAMESPACE"
 fi
 
-echo "Application is accessible at: ${CI_ENVIRONMENT_SLUG}.${FQDN}"
+echo "Application is accessible at: ${ENV_FQDN}"
 echo ""
